@@ -70,7 +70,7 @@ jobs:
           node-version: "20"
 
       - name: Install npm dependencies
-        run: npm ci
+        run: npm install
 
       - name: Verify CLI loads
         run: node bin/phaicaid.js --help

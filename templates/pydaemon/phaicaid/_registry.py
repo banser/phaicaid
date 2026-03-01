@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 import types
-from typing import Any, Callable, Optional
+from typing import Any, Callable
 
 from .decorators import _DEFAULT_ATTR, _TOOL_ATTR
 
@@ -15,7 +15,7 @@ _ToolHandlers = list[tuple[list[re.Pattern[str]], _HandlerFn]]
 
 def _find_handlers(
     mod: types.ModuleType,
-) -> tuple[_ToolHandlers, Optional[_HandlerFn]]:
+) -> tuple[_ToolHandlers, _HandlerFn | None]:
     """Scan *mod* for ``@tool`` and ``@default`` decorated functions.
 
     Args:
@@ -27,7 +27,7 @@ def _find_handlers(
         either a callable or ``None``.
     """
     tool_handlers: _ToolHandlers = []
-    default_handler: Optional[_HandlerFn] = None
+    default_handler: _HandlerFn | None = None
 
     for name in dir(mod):
         obj = getattr(mod, name)

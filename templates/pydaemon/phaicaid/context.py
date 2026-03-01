@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 
 def _eprint(*args: object, **kwargs: Any) -> None:
@@ -50,7 +50,7 @@ class HookContext:
         return self.payload.get("toolInput", {})
 
     @property
-    def tool_response(self) -> Optional[Any]:
+    def tool_response(self) -> Any | None:
         """Tool response (available in PostToolUse events only)."""
         return self.payload.get("toolResponse")
 
@@ -153,7 +153,7 @@ class HookContext:
         return {"hookSpecificOutput": {"systemMessage": text}}
 
     @staticmethod
-    def combine(*responses: Optional[dict[str, Any]]) -> dict[str, Any]:
+    def combine(*responses: dict[str, Any] | None) -> dict[str, Any]:
         """Merge multiple response dicts into one.
 
         Later values win for top-level keys.  ``hookSpecificOutput`` dicts are

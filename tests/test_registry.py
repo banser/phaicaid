@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import types
 from pathlib import Path
-from unittest.mock import MagicMock
 
 from phaicaid._registry import _find_handlers, dispatch_decorated, has_decorators
 from phaicaid.context import HookContext

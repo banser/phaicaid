@@ -20,7 +20,7 @@ import time
 import traceback
 import types
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 # Make the phaicaid SDK importable from user hooks.
 # The SDK lives alongside this file at <runtime>/pydaemon/phaicaid/
@@ -28,8 +28,8 @@ _pydaemon_dir = str(Path(__file__).resolve().parent)
 if _pydaemon_dir not in sys.path:
     sys.path.insert(0, _pydaemon_dir)
 
-from phaicaid._registry import dispatch_decorated, has_decorators
-from phaicaid.context import HookContext
+from phaicaid._registry import dispatch_decorated, has_decorators  # noqa: E402
+from phaicaid.context import HookContext  # noqa: E402
 
 
 def _eprint(*args: object, **kwargs: Any) -> None:
@@ -188,7 +188,7 @@ def dispatch(
     event: str,
     payload: dict[str, Any],
     runtime_dir: Path,
-) -> Optional[dict[str, Any]]:
+) -> dict[str, Any] | None:
     """Load the hook module for *event* and call the appropriate handler.
 
     Decorator-style dispatch (``@tool``/``@default``) takes priority.
@@ -306,10 +306,10 @@ def serve_tcp(port_file: Path, runtime_dir: Path) -> None:
         pass
     finally:
         srv.close()
-        try:
+        import contextlib
+
+        with contextlib.suppress(OSError):
             port_file.unlink()
-        except OSError:
-            pass
 
 
 # ---------------------------------------------------------------------------
