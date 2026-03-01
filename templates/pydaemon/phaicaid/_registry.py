@@ -51,8 +51,7 @@ def has_decorators(mod: types.ModuleType) -> bool:
     for name in dir(mod):
         obj = getattr(mod, name)
         if callable(obj) and (
-            getattr(obj, _TOOL_ATTR, None) is not None
-            or getattr(obj, _DEFAULT_ATTR, False)
+            getattr(obj, _TOOL_ATTR, None) is not None or getattr(obj, _DEFAULT_ATTR, False)
         ):
             return True
     return False

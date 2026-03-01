@@ -160,7 +160,9 @@ class TestDispatchDecorated:
 
         mod = _make_module(log_mcp=log_mcp)
         result = dispatch_decorated(
-            mod, "mcp__wrike__get_tasks", self._ctx("mcp__wrike__get_tasks"),
+            mod,
+            "mcp__wrike__get_tasks",
+            self._ctx("mcp__wrike__get_tasks"),
         )
         assert result == {"logged": True}
 

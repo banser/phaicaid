@@ -74,10 +74,7 @@ class HookContext:
     @property
     def file_path(self) -> str:
         """Read/Write/Edit tool shortcut: the target file path."""
-        return (
-            self.tool_input.get("file_path", "")
-            or self.tool_input.get("filePath", "")
-        )
+        return self.tool_input.get("file_path", "") or self.tool_input.get("filePath", "")
 
     @property
     def content(self) -> str:
@@ -167,11 +164,7 @@ class HookContext:
             if r is None:
                 continue
             for k, v in r.items():
-                if (
-                    k == "hookSpecificOutput"
-                    and k in merged
-                    and isinstance(v, dict)
-                ):
+                if k == "hookSpecificOutput" and k in merged and isinstance(v, dict):
                     merged[k] = {**merged[k], **v}
                 else:
                     merged[k] = v

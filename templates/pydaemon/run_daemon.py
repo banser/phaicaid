@@ -129,7 +129,9 @@ def _watch_inotify(hooks_dir: Path) -> None:
             offset = 0
             while offset < len(n):
                 _wd_ev, _mask, _cookie, name_len = struct.unpack_from(
-                    "iIII", n, offset,
+                    "iIII",
+                    n,
+                    offset,
                 )
                 name_bytes = n[offset + event_hdr_size : offset + event_hdr_size + name_len]
                 name = name_bytes.rstrip(b"\x00").decode()
@@ -244,11 +246,13 @@ def handle_req(line: str, runtime_dir: Path) -> str:
         except Exception as exc:
             if raw:
                 return json.dumps({"error": str(exc)})
-            return json.dumps({
-                "ok": False,
-                "error": str(exc),
-                "trace": traceback.format_exc(limit=8),
-            })
+            return json.dumps(
+                {
+                    "ok": False,
+                    "error": str(exc),
+                    "trace": traceback.format_exc(limit=8),
+                }
+            )
 
     return json.dumps({"ok": False, "error": "unknown_op"})
 

@@ -42,22 +42,27 @@ class TestDispatch:
 
     def test_simple_style_handle(self, tmp_runtime: Path) -> None:
         hook_file = tmp_runtime / "hooks" / "pre_tool_use.py"
-        hook_file.write_text(textwrap.dedent("""\
+        hook_file.write_text(
+            textwrap.dedent("""\
             def handle(payload, ctx):
                 return {"handled": True, "tool": payload.get("toolName", "")}
-        """))
+        """)
+        )
 
         # Clear module cache to ensure fresh load.
         run_daemon.invalidate_module(hook_file)
 
         result = run_daemon.dispatch(
-            "PreToolUse", {"toolName": "Bash"}, tmp_runtime,
+            "PreToolUse",
+            {"toolName": "Bash"},
+            tmp_runtime,
         )
         assert result == {"handled": True, "tool": "Bash"}
 
     def test_decorator_style_dispatch(self, tmp_runtime: Path) -> None:
         hook_file = tmp_runtime / "hooks" / "pre_tool_use.py"
-        hook_file.write_text(textwrap.dedent("""\
+        hook_file.write_text(
+            textwrap.dedent("""\
             import sys, os
             # Add pydaemon to path so we can import phaicaid
             _dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -74,11 +79,13 @@ class TestDispatch:
             @default
             def fallback(ctx):
                 return {"decision": "allow"}
-        """))
+        """)
+        )
 
         # We need the pydaemon dir next to hooks for the import to work.
         # Copy the SDK package into our temp runtime.
         import shutil
+
         sdk_src = Path(__file__).resolve().parent.parent / "templates" / "pydaemon" / "phaicaid"
         sdk_dst = tmp_runtime / "pydaemon" / "phaicaid"
         if not sdk_dst.exists():
@@ -88,13 +95,17 @@ class TestDispatch:
 
         # Bash should hit @tool("Bash")
         result = run_daemon.dispatch(
-            "PreToolUse", {"toolName": "Bash"}, tmp_runtime,
+            "PreToolUse",
+            {"toolName": "Bash"},
+            tmp_runtime,
         )
         assert result == {"decision": "deny", "reason": "blocked"}
 
         # Write should fall to @default
         result = run_daemon.dispatch(
-            "PreToolUse", {"toolName": "Write"}, tmp_runtime,
+            "PreToolUse",
+            {"toolName": "Write"},
+            tmp_runtime,
         )
         assert result == {"decision": "allow"}
 
@@ -165,10 +176,12 @@ class TestHandleReq:
         hook_file.write_text("def handle(payload, ctx): return {'test': True}\n")
         run_daemon.invalidate_module(hook_file)
 
-        req = json.dumps({
-            "op": "hook",
-            "data": {"__event": "SessionStart", "__payload": {}},
-        })
+        req = json.dumps(
+            {
+                "op": "hook",
+                "data": {"__event": "SessionStart", "__payload": {}},
+            }
+        )
         resp = run_daemon.handle_req(req, tmp_runtime)
         parsed = json.loads(resp)
         assert parsed["ok"] is True
@@ -181,11 +194,13 @@ class TestHandleReq:
         )
         run_daemon.invalidate_module(hook_file)
 
-        req = json.dumps({
-            "op": "hook",
-            "raw": True,
-            "data": {"__event": "SessionStart", "__payload": {}},
-        })
+        req = json.dumps(
+            {
+                "op": "hook",
+                "raw": True,
+                "data": {"__event": "SessionStart", "__payload": {}},
+            }
+        )
         resp = run_daemon.handle_req(req, tmp_runtime)
         parsed = json.loads(resp)
         assert parsed == {"decision": "allow"}
@@ -195,19 +210,23 @@ class TestHandleReq:
         hook_file.write_text("def handle(payload, ctx): return None\n")
         run_daemon.invalidate_module(hook_file)
 
-        req = json.dumps({
-            "op": "hook",
-            "raw": True,
-            "data": {"__event": "SessionStart", "__payload": {}},
-        })
+        req = json.dumps(
+            {
+                "op": "hook",
+                "raw": True,
+                "data": {"__event": "SessionStart", "__payload": {}},
+            }
+        )
         resp = run_daemon.handle_req(req, tmp_runtime)
         assert resp == ""
 
     def test_hook_no_file_returns_null(self, tmp_runtime: Path) -> None:
-        req = json.dumps({
-            "op": "hook",
-            "data": {"__event": "NonExistent", "__payload": {}},
-        })
+        req = json.dumps(
+            {
+                "op": "hook",
+                "data": {"__event": "NonExistent", "__payload": {}},
+            }
+        )
         resp = run_daemon.handle_req(req, tmp_runtime)
         parsed = json.loads(resp)
         assert parsed["ok"] is True
@@ -218,10 +237,12 @@ class TestHandleReq:
         hook_file.write_text("def handle(payload, ctx): raise ValueError('boom')\n")
         run_daemon.invalidate_module(hook_file)
 
-        req = json.dumps({
-            "op": "hook",
-            "data": {"__event": "SessionStart", "__payload": {}},
-        })
+        req = json.dumps(
+            {
+                "op": "hook",
+                "data": {"__event": "SessionStart", "__payload": {}},
+            }
+        )
         resp = run_daemon.handle_req(req, tmp_runtime)
         parsed = json.loads(resp)
         assert parsed["ok"] is False
@@ -232,11 +253,13 @@ class TestHandleReq:
         hook_file.write_text("def handle(payload, ctx): raise ValueError('boom')\n")
         run_daemon.invalidate_module(hook_file)
 
-        req = json.dumps({
-            "op": "hook",
-            "raw": True,
-            "data": {"__event": "SessionStart", "__payload": {}},
-        })
+        req = json.dumps(
+            {
+                "op": "hook",
+                "raw": True,
+                "data": {"__event": "SessionStart", "__payload": {}},
+            }
+        )
         resp = run_daemon.handle_req(req, tmp_runtime)
         parsed = json.loads(resp)
         assert "boom" in parsed["error"]
