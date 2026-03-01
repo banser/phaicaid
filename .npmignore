@@ -1,0 +1,27 @@
+# Dev/test files
+tests/
+bench/
+docs/
+.github/
+.claude/
+.phaicaid/
+
+# Python artifacts
+**/__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+coverage.xml
+
+# Config
+pyproject.toml
+Makefile
+.gitignore
+.DS_Store
+
+# npm
+node_modules/
+package-lock.json

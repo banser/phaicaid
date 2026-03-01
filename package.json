@@ -1,0 +1,46 @@
+{
+  "name": "phaicaid",
+  "version": "0.1.0",
+  "description": "Python Hooks for AI Coding Assistant: Interface and Daemon (Claude Code + GitHub Copilot CLI)",
+  "bin": {
+    "phaicaid": "bin/phaicaid.js"
+  },
+  "type": "module",
+  "license": "MIT",
+  "files": [
+    "bin/",
+    "templates/**/*.py",
+    "templates/**/py.typed",
+    "README.md",
+    "LICENSE"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/banser/phaicaid.git"
+  },
+  "homepage": "https://github.com/banser/phaicaid#readme",
+  "bugs": {
+    "url": "https://github.com/banser/phaicaid/issues"
+  },
+  "author": "banser",
+  "keywords": [
+    "claude",
+    "claude-code",
+    "copilot",
+    "hooks",
+    "python",
+    "daemon",
+    "ai-coding-assistant",
+    "phaicaid"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "test": "python3 -m pytest tests/ -v",
+    "lint": "python3 -m ruff check templates/pydaemon/ tests/"
+  },
+  "dependencies": {
+    "commander": "^12.1.0"
+  }
+}

@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+# Ultra-lightweight hook runner — pure bash + socat, no interpreter startup.
+set -euo pipefail
+
+EVENT=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --event) EVENT="$2"; shift 2 ;;
+    *) shift ;;
+  esac
+done
+
+if [[ -z "$EVENT" ]]; then
+  echo "usage: phaicaid-run-bash --event <event>" >&2
+  exit 1
+fi
+
+RTDIR="$(pwd)/.phaicaid"
+SOCK="$RTDIR/run/phaicaid.sock"
+
+# Read stdin payload
+STDIN_DATA=""
+if [[ ! -t 0 ]]; then
+  STDIN_DATA=$(cat)
+fi
+
+if [[ -z "$STDIN_DATA" || "$STDIN_DATA" == "{}" ]]; then
+  PAYLOAD='{}'
+else
+  PAYLOAD="$STDIN_DATA"
+fi
+
+MSG="{\"op\":\"hook\",\"raw\":true,\"data\":{\"__event\":\"$EVENT\",\"__payload\":$PAYLOAD}}"
+
+echo "$MSG" | socat - UNIX-CONNECT:"$SOCK"

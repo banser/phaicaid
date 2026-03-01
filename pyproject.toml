@@ -1,0 +1,32 @@
+[project]
+name = "phaicaid"
+version = "0.1.0"
+description = "Python Hooks for AI Coding Assistant: Interface and Daemon"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.9"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["templates/pydaemon"]
+addopts = "-v --tb=short"
+
+[tool.coverage.run]
+source = ["templates/pydaemon/phaicaid", "templates/pydaemon/run_daemon.py"]
+
+[tool.coverage.report]
+show_missing = true
+fail_under = 80
+
+[tool.ruff]
+line-length = 99
+target-version = "py39"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM"]
+
+[tool.mypy]
+python_version = "3.9"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true

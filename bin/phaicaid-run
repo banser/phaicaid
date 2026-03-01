@@ -1,0 +1,96 @@
+#!/usr/bin/env python3
+"""Lightweight hook runner that talks directly to the daemon socket.
+Used as the hot-path command in hooks.json instead of `node phaicaid.js run`.
+"""
+import json, os, socket, subprocess, sys, time
+from pathlib import Path
+
+def find_runtime():
+    return Path.cwd() / ".phaicaid"
+
+def sock_path(rt):
+    return rt / "run" / "phaicaid.sock"
+
+def daemon_entry(rt):
+    return rt / "pydaemon" / "run_daemon.py"
+
+def python_path(rt):
+    vpy = rt / "venv" / "bin" / "python"
+    if vpy.exists():
+        return str(vpy)
+    return os.environ.get("PHAICAID_PYTHON", "python3")
+
+def start_daemon(rt):
+    py = python_path(rt)
+    entry = daemon_entry(rt)
+    log = rt / "run" / "daemon.log"
+    with open(log, "a") as f:
+        subprocess.Popen(
+            [py, str(entry), "--runtime", str(rt)],
+            stdout=f, stderr=f, stdin=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+
+def ping(sp):
+    try:
+        s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        s.settimeout(0.5)
+        s.connect(str(sp))
+        s.close()
+        return True
+    except Exception:
+        return False
+
+def ensure_daemon(rt):
+    sp = sock_path(rt)
+    if sp.exists() and ping(sp):
+        return
+    start_daemon(rt)
+    for _ in range(40):
+        if sp.exists() and ping(sp):
+            return
+        time.sleep(0.05)
+
+def rpc(sp, msg):
+    s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    s.settimeout(5)
+    s.connect(str(sp))
+    s.sendall((msg + "\n").encode())
+    buf = b""
+    while b"\n" not in buf:
+        chunk = s.recv(65536)
+        if not chunk:
+            break
+        buf += chunk
+    s.close()
+    return buf.split(b"\n", 1)[0].decode()
+
+def main():
+    event = None
+    for i, a in enumerate(sys.argv[1:], 1):
+        if a == "--event" and i < len(sys.argv) - 1:
+            event = sys.argv[i + 1]
+            break
+    if not event:
+        print("usage: phaicaid-run --event <event>", file=sys.stderr)
+        sys.exit(1)
+
+    rt = find_runtime()
+    sp = sock_path(rt)
+    ensure_daemon(rt)
+
+    stdin_data = ""
+    if not sys.stdin.isatty():
+        stdin_data = sys.stdin.read()
+    payload = json.loads(stdin_data) if stdin_data.strip() else {}
+    msg = json.dumps({"op": "hook", "data": {"__event": event, "__payload": payload}})
+
+    try:
+        resp = rpc(sp, msg)
+        print(resp)
+    except Exception as e:
+        print(f"[phaicaid] rpc failed: {e}", file=sys.stderr)
+        sys.exit(1)
+
+if __name__ == "__main__":
+    main()
