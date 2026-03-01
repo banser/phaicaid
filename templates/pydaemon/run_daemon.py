@@ -14,6 +14,7 @@ import importlib.util
 import json
 import os
 import re
+import signal
 import socket
 import sys
 import threading
@@ -275,6 +276,7 @@ def handle_req(line: str, runtime_dir: Path) -> str:
 # ---------------------------------------------------------------------------
 def _handle_conn(conn: socket.socket, runtime_dir: Path) -> None:
     """Read one newline-delimited request and send back the response."""
+    conn.settimeout(30)
     with conn:
         data = b""
         while True:
@@ -362,6 +364,10 @@ def main() -> None:
             pid_file.unlink()
 
     atexit.register(_remove_pid)
+
+    # Handle SIGTERM so atexit/finally blocks run on daemon stop.
+    if os.name != "nt":
+        signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
 
     start_watcher(hooks_dir)
 

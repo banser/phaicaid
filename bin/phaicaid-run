@@ -67,12 +67,14 @@ def rpc(sp, msg):
 
 def main():
     event = None
+    target = ""
     for i, a in enumerate(sys.argv[1:], 1):
         if a == "--event" and i < len(sys.argv) - 1:
             event = sys.argv[i + 1]
-            break
+        elif a == "--target" and i < len(sys.argv) - 1:
+            target = sys.argv[i + 1]
     if not event:
-        print("usage: phaicaid-run --event <event>", file=sys.stderr)
+        print("usage: phaicaid-run --event <event> [--target <target>]", file=sys.stderr)
         sys.exit(1)
 
     rt = find_runtime()
@@ -83,7 +85,7 @@ def main():
     if not sys.stdin.isatty():
         stdin_data = sys.stdin.read()
     payload = json.loads(stdin_data) if stdin_data.strip() else {}
-    msg = json.dumps({"op": "hook", "data": {"__event": event, "__payload": payload}})
+    msg = json.dumps({"op": "hook", "data": {"__event": event, "__payload": payload, "__target": target}})
 
     try:
         resp = rpc(sp, msg)

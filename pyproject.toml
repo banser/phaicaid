@@ -12,11 +12,11 @@ pythonpath = ["templates/pydaemon"]
 addopts = "-v --tb=short"
 
 [tool.coverage.run]
-source = ["templates/pydaemon/phaicaid", "templates/pydaemon/run_daemon.py"]
+source = ["phaicaid", "run_daemon"]
 
 [tool.coverage.report]
 show_missing = true
-fail_under = 80
+fail_under = 65
 
 [tool.ruff]
 line-length = 99

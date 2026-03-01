@@ -450,12 +450,25 @@ program.command("restart")
   });
 
 program.command("clean")
-  .description("Stop daemon and remove .phaicaid runtime directory")
-  .action(async () => {
+  .description("Stop daemon and remove .phaicaid runtime (preserves hooks/ unless --force)")
+  .option("--force", "also remove hooks/ directory")
+  .action(async (opts) => {
     const r = root();
     await stopDaemon(r);
-    fs.rmSync(rtDir(r), { recursive: true, force: true });
-    console.error("[phaicaid] cleaned " + rtDir(r));
+    const rt = rtDir(r);
+    const hooksDir = path.join(rt, "hooks");
+    if (opts.force) {
+      fs.rmSync(rt, { recursive: true, force: true });
+      console.error("[phaicaid] cleaned " + rt + " (including hooks)");
+    } else {
+      // Remove everything except hooks/
+      for (const ent of fs.readdirSync(rt, { withFileTypes: true })) {
+        if (ent.name === "hooks") continue;
+        const p = path.join(rt, ent.name);
+        fs.rmSync(p, { recursive: true, force: true });
+      }
+      console.error("[phaicaid] cleaned " + rt + " (hooks/ preserved — use --force to remove)");
+    }
   });
 
 program.parse(process.argv);
