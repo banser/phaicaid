@@ -202,6 +202,31 @@ class TestCombine:
         assert "reason" in result  # first writer's key preserved
 
 
+class TestTarget:
+    def test_target_defaults_to_empty(self) -> None:
+        ctx = HookContext("PreToolUse", {}, Path("/tmp"))
+        assert ctx.target == ""
+
+    def test_target_set_on_init(self) -> None:
+        ctx = HookContext("PreToolUse", {}, Path("/tmp"), target="claude")
+        assert ctx.target == "claude"
+
+    def test_is_claude(self) -> None:
+        ctx = HookContext("PreToolUse", {}, Path("/tmp"), target="claude")
+        assert ctx.is_claude is True
+        assert ctx.is_copilot is False
+
+    def test_is_copilot(self) -> None:
+        ctx = HookContext("PreToolUse", {}, Path("/tmp"), target="copilot")
+        assert ctx.is_copilot is True
+        assert ctx.is_claude is False
+
+    def test_neither_target(self) -> None:
+        ctx = HookContext("PreToolUse", {}, Path("/tmp"), target="other")
+        assert ctx.is_claude is False
+        assert ctx.is_copilot is False
+
+
 class TestLog:
     def test_log_writes_to_stderr(self, capsys: object) -> None:
         ctx = HookContext("PreToolUse", {}, Path("/tmp"))

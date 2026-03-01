@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from phaicaid.decorators import _DEFAULT_ATTR, _TOOL_ATTR, default, tool
+from phaicaid.decorators import _DEFAULT_ATTR, _ORDER_ATTR, _TOOL_ATTR, default, tool
 
 
 class TestToolDecorator:
@@ -106,3 +106,31 @@ class TestDefaultDecorator:
             pass
 
         assert getattr(handler, _TOOL_ATTR, None) is None
+
+
+class TestOrderAttribute:
+    """Issue 7: Decorators set monotonically increasing order attributes."""
+
+    def test_sets_order_attribute(self) -> None:
+        @tool("Bash")
+        def handler(ctx):  # type: ignore[no-untyped-def]
+            pass
+
+        assert hasattr(handler, _ORDER_ATTR)
+        assert isinstance(getattr(handler, _ORDER_ATTR), int)
+
+    def test_order_is_monotonically_increasing(self) -> None:
+        @tool("Bash")
+        def first(ctx):  # type: ignore[no-untyped-def]
+            pass
+
+        @tool("Write")
+        def second(ctx):  # type: ignore[no-untyped-def]
+            pass
+
+        @default
+        def third(ctx):  # type: ignore[no-untyped-def]
+            pass
+
+        assert getattr(first, _ORDER_ATTR) < getattr(second, _ORDER_ATTR)
+        assert getattr(second, _ORDER_ATTR) < getattr(third, _ORDER_ATTR)

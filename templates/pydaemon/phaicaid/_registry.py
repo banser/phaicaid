@@ -6,17 +6,22 @@ import re
 import types
 from typing import Any, Callable
 
-from .decorators import _DEFAULT_ATTR, _TOOL_ATTR
+from .decorators import _DEFAULT_ATTR, _ORDER_ATTR, _TOOL_ATTR
 
 # Type aliases for clarity.
 _HandlerFn = Callable[..., Any]
 _ToolHandlers = list[tuple[list[re.Pattern[str]], _HandlerFn]]
+
+# Cache attribute stored on the module object itself.
+_HANDLERS_CACHE_ATTR = "_phaicaid_handlers_cache"
 
 
 def _find_handlers(
     mod: types.ModuleType,
 ) -> tuple[_ToolHandlers, _HandlerFn | None]:
     """Scan *mod* for ``@tool`` and ``@default`` decorated functions.
+
+    Results are cached on the module object to avoid repeated ``dir()`` scans.
 
     Args:
         mod: A loaded Python module to scan.
@@ -26,6 +31,10 @@ def _find_handlers(
         a list of ``(compiled_patterns, fn)`` pairs and *default_handler* is
         either a callable or ``None``.
     """
+    cached = getattr(mod, _HANDLERS_CACHE_ATTR, None)
+    if cached is not None:
+        return cached  # type: ignore[return-value]
+
     tool_handlers: _ToolHandlers = []
     default_handler: _HandlerFn | None = None
 
@@ -39,7 +48,12 @@ def _find_handlers(
         if getattr(obj, _DEFAULT_ATTR, False):
             default_handler = obj
 
-    return tool_handlers, default_handler
+    # Sort tool handlers by definition order instead of alphabetical dir() order.
+    tool_handlers.sort(key=lambda pair: getattr(pair[1], _ORDER_ATTR, float("inf")))
+
+    result = (tool_handlers, default_handler)
+    setattr(mod, _HANDLERS_CACHE_ATTR, result)
+    return result
 
 
 def has_decorators(mod: types.ModuleType) -> bool:
@@ -48,6 +62,11 @@ def has_decorators(mod: types.ModuleType) -> bool:
     Args:
         mod: A loaded Python module to inspect.
     """
+    cached = getattr(mod, _HANDLERS_CACHE_ATTR, None)
+    if cached is not None:
+        tool_handlers, default_handler = cached
+        return bool(tool_handlers) or default_handler is not None
+
     for name in dir(mod):
         obj = getattr(mod, name)
         if callable(obj) and (

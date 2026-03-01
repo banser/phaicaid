@@ -149,6 +149,9 @@ Every handler receives a `ctx` object with parsed payload accessors:
 | `ctx.tool_response` | Tool response (PostToolUse only) |
 | `ctx.session_id` | Session ID |
 | `ctx.cwd` | Working directory |
+| `ctx.target` | Target assistant (`"claude"` or `"copilot"`) |
+| `ctx.is_claude` | `True` when triggered by Claude Code |
+| `ctx.is_copilot` | `True` when triggered by GitHub Copilot |
 | `ctx.payload` | Raw payload dict |
 
 ### Tool shortcuts
@@ -244,7 +247,10 @@ The daemon amortizes Python startup and import costs. phaicaid stays flat at ~12
 | `npx phaicaid add all` | Scaffold all hook events at once |
 | `npx phaicaid doctor` | Check runtime health |
 | `npx phaicaid snippet --target claude\|copilot` | Print hooks config JSON |
-| `npx phaicaid run --event <event>` | Run a hook (Node.js fallback runner) |
+| `npx phaicaid run --event <event> [--target claude\|copilot]` | Run a hook (Node.js fallback runner) |
+| `npx phaicaid stop` | Stop the running daemon |
+| `npx phaicaid restart` | Restart the daemon |
+| `npx phaicaid clean` | Stop daemon and remove `.phaicaid/` runtime dir |
 
 ## File Layout
 
@@ -263,6 +269,6 @@ The daemon amortizes Python startup and import costs. phaicaid stays flat at ~12
 │       ├── context.py      # HookContext + response builders
 │       ├── decorators.py   # @tool, @default
 │       └── _registry.py    # handler dispatch
-├── run/                    # runtime state (socket, logs)
+├── run/                    # runtime state (socket, pid, logs)
 └── venv/                   # Python virtual environment
 ```

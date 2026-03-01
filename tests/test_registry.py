@@ -5,7 +5,12 @@ from __future__ import annotations
 import types
 from pathlib import Path
 
-from phaicaid._registry import _find_handlers, dispatch_decorated, has_decorators
+from phaicaid._registry import (
+    _HANDLERS_CACHE_ATTR,
+    _find_handlers,
+    dispatch_decorated,
+    has_decorators,
+)
 from phaicaid.context import HookContext
 from phaicaid.decorators import default, tool
 
@@ -203,3 +208,66 @@ class TestDispatchDecorated:
         mod = _make_module(catch_all=catch_all)
         result = dispatch_decorated(mod, "Anything", self._ctx("Anything"))
         assert result == {"caught": "Anything"}
+
+
+class TestHandlerCache:
+    """Issue 6: _find_handlers caches results on the module."""
+
+    def test_caches_result_on_module(self) -> None:
+        @tool("Bash")
+        def guard(ctx):  # type: ignore[no-untyped-def]
+            pass
+
+        mod = _make_module(guard=guard)
+        result1 = _find_handlers(mod)
+        result2 = _find_handlers(mod)
+        # Same object returned from cache.
+        assert result1 is result2
+        # Cache attribute is set on the module.
+        assert getattr(mod, _HANDLERS_CACHE_ATTR) is result1
+
+    def test_cache_cleared_on_fresh_module(self) -> None:
+        @tool("Bash")
+        def guard(ctx):  # type: ignore[no-untyped-def]
+            pass
+
+        mod1 = _make_module(guard=guard)
+        _find_handlers(mod1)
+
+        # A fresh module should not have a cache.
+        mod2 = _make_module(guard=guard)
+        assert getattr(mod2, _HANDLERS_CACHE_ATTR, None) is None
+
+    def test_has_decorators_uses_cache(self) -> None:
+        @tool("Bash")
+        def guard(ctx):  # type: ignore[no-untyped-def]
+            pass
+
+        mod = _make_module(guard=guard)
+        _find_handlers(mod)  # Populate cache.
+        assert has_decorators(mod) is True
+
+
+class TestDefinitionOrder:
+    """Issue 7: Handlers should dispatch in definition order, not alphabetical."""
+
+    def _ctx(self, tool_name: str = "Bash") -> HookContext:
+        return HookContext("PreToolUse", {"toolName": tool_name}, Path("/tmp"))
+
+    def test_definition_order_not_alphabetical(self) -> None:
+        # Define zzz before aaa — zzz should win dispatch since it was
+        # decorated first (lower _phaicaid_order).
+        @tool("Bash")
+        def zzz_handler(ctx):  # type: ignore[no-untyped-def]
+            return {"handler": "zzz"}
+
+        @tool("Bash")
+        def aaa_handler(ctx):  # type: ignore[no-untyped-def]
+            return {"handler": "aaa"}
+
+        mod = _make_module(zzz_handler=zzz_handler, aaa_handler=aaa_handler)
+        result = dispatch_decorated(mod, "Bash", self._ctx("Bash"))
+        assert result is not None
+        # zzz_handler was decorated first, so it has a lower order number
+        # and should win despite 'aaa' coming first alphabetically.
+        assert result["handler"] == "zzz"

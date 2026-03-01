@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import json
+import socket
 import sys
 import textwrap
+import threading
+import time
 from pathlib import Path
 
 # run_daemon is a script, not a package — import it by adding to path.
@@ -263,3 +266,139 @@ class TestHandleReq:
         resp = run_daemon.handle_req(req, tmp_runtime)
         parsed = json.loads(resp)
         assert "boom" in parsed["error"]
+
+
+class TestConcurrency:
+    """Issue 1: Daemon should handle requests concurrently."""
+
+    def test_concurrent_requests(self, tmp_runtime: Path) -> None:
+        hook_file = tmp_runtime / "hooks" / "session_start.py"
+        hook_file.write_text(
+            textwrap.dedent("""\
+            import time
+            def handle(payload, ctx):
+                time.sleep(0.2)
+                return {"done": True}
+        """)
+        )
+        run_daemon.invalidate_module(hook_file)
+
+        # Start a temporary Unix socket server using the daemon's serve loop.
+        sock_path = tmp_runtime / "run" / "test_concurrent.sock"
+        if sock_path.exists():
+            sock_path.unlink()
+        srv = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        srv.bind(str(sock_path))
+        srv.listen(8)
+
+        def serve_loop() -> None:
+            for _ in range(2):  # Accept exactly 2 connections.
+                conn, _ = srv.accept()
+                threading.Thread(
+                    target=run_daemon._handle_conn,
+                    args=(conn, tmp_runtime),
+                    daemon=True,
+                ).start()
+
+        server_thread = threading.Thread(target=serve_loop, daemon=True)
+        server_thread.start()
+
+        results: list[str] = []
+        barrier = threading.Barrier(2)
+
+        def send_request() -> None:
+            barrier.wait()  # Ensure both connect at roughly the same time.
+            c = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            c.connect(str(sock_path))
+            req = json.dumps({"op": "hook", "data": {"__event": "SessionStart", "__payload": {}}})
+            c.sendall((req + "\n").encode())
+            data = b""
+            while b"\n" not in data:
+                chunk = c.recv(4096)
+                if not chunk:
+                    break
+                data += chunk
+            c.close()
+            results.append(data.decode())
+
+        t0 = time.monotonic()
+        threads = [threading.Thread(target=send_request) for _ in range(2)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=5)
+        elapsed = time.monotonic() - t0
+
+        srv.close()
+
+        assert len(results) == 2
+        # If handled concurrently, both 0.2s sleeps overlap → total < 0.35s.
+        # If serial, total would be ~0.4s.
+        assert elapsed < 0.35, f"expected < 0.35s, got {elapsed:.3f}s"
+
+
+class TestMtimeCheck:
+    """Issue 2: Module cache should check mtime on read."""
+
+    def test_mtime_check_reloads_changed_file(self, tmp_runtime: Path) -> None:
+        import uuid
+
+        name = f"mtime_{uuid.uuid4().hex[:8]}"
+        hook_file = tmp_runtime / "hooks" / f"{name}.py"
+        hook_file.write_text("VALUE = 1\n")
+
+        mod1 = run_daemon.get_module(hook_file)
+        assert mod1.VALUE == 1  # type: ignore[attr-defined]
+
+        # Change the file WITHOUT calling invalidate_module.
+        # We need to ensure the mtime actually changes (some filesystems have
+        # low-resolution timestamps), so we poke the mtime manually.
+        hook_file.write_text("VALUE = 2\n")
+        import os
+
+        st = hook_file.stat()
+        os.utime(hook_file, ns=(st.st_atime_ns, st.st_mtime_ns + 1_000_000_000))
+
+        # Clear sys.modules and bytecache so a truly fresh import happens.
+        sys.modules.pop(name, None)
+        pyc = hook_file.parent / "__pycache__"
+        if pyc.exists():
+            import shutil
+
+            shutil.rmtree(pyc)
+
+        mod2 = run_daemon.get_module(hook_file)
+        assert mod2.VALUE == 2  # type: ignore[attr-defined]
+        assert mod1 is not mod2
+
+    def test_mtime_check_deleted_file_returns_cached(self, tmp_runtime: Path) -> None:
+        import uuid
+
+        name = f"mtime_del_{uuid.uuid4().hex[:8]}"
+        hook_file = tmp_runtime / "hooks" / f"{name}.py"
+        hook_file.write_text("VALUE = 42\n")
+
+        mod1 = run_daemon.get_module(hook_file)
+        assert mod1.VALUE == 42  # type: ignore[attr-defined]
+
+        # Delete the file — get_module should return the stale cached module.
+        hook_file.unlink()
+        mod2 = run_daemon.get_module(hook_file)
+        assert mod2 is mod1
+
+
+class TestDispatchTarget:
+    """Issue 5: dispatch passes target through to HookContext."""
+
+    def test_dispatch_passes_target(self, tmp_runtime: Path) -> None:
+        hook_file = tmp_runtime / "hooks" / "session_start.py"
+        hook_file.write_text(
+            textwrap.dedent("""\
+            def handle(payload, ctx):
+                return {"target": ctx.target, "is_claude": ctx.is_claude}
+        """)
+        )
+        run_daemon.invalidate_module(hook_file)
+
+        result = run_daemon.dispatch("SessionStart", {}, tmp_runtime, target="claude")
+        assert result == {"target": "claude", "is_claude": True}

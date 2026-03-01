@@ -87,10 +87,10 @@ def log_all(ctx):
   fs.chmodSync(path.join(binDir, "phaicaid-run"), 0o755);
 }
 
-function runCmd(event) {
+function runCmd(event, target) {
   // Use the fast bash+socat client for the hot path.
   // The script is copied into .phaicaid/ at init time so it's always available.
-  return `.phaicaid/bin/phaicaid-run --event ${event}`;
+  return `.phaicaid/bin/phaicaid-run --event ${event} --target ${target}`;
 }
 
 // Events that support matcher (tool name, agent type, etc.) in Claude Code.
@@ -101,7 +101,7 @@ const CLAUDE_MATCHER_EVENTS = new Set([
 ]);
 
 function claudeHookEntry(event) {
-  const hook = { type: "command", command: runCmd(event) };
+  const hook = { type: "command", command: runCmd(event, "claude") };
   if (CLAUDE_MATCHER_EVENTS.has(event)) {
     return [{ matcher: ".*", hooks: [hook] }];
   }
@@ -127,12 +127,12 @@ function hooksJson(target) {
   }
   if (target === "copilot") {
     return JSON.stringify({
-      sessionStart: [{ command: runCmd("sessionStart") }],
-      sessionEnd: [{ command: runCmd("sessionEnd") }],
-      userPromptSubmitted: [{ command: runCmd("userPromptSubmitted") }],
-      preToolUse: [{ command: runCmd("preToolUse") }],
-      postToolUse: [{ command: runCmd("postToolUse") }],
-      errorOccurred: [{ command: runCmd("errorOccurred") }]
+      sessionStart: [{ command: runCmd("sessionStart", "copilot") }],
+      sessionEnd: [{ command: runCmd("sessionEnd", "copilot") }],
+      userPromptSubmitted: [{ command: runCmd("userPromptSubmitted", "copilot") }],
+      preToolUse: [{ command: runCmd("preToolUse", "copilot") }],
+      postToolUse: [{ command: runCmd("postToolUse", "copilot") }],
+      errorOccurred: [{ command: runCmd("errorOccurred", "copilot") }]
     }, null, 2);
   }
   throw new Error("target must be claude|copilot");
@@ -174,6 +174,7 @@ async function ensureDaemon(r) {
     if (fs.existsSync(sock) && await pingUnix()) return;
     startDaemon(r);
     for (let i=0;i<40;i++){ if (fs.existsSync(sock) && await pingUnix()) return; await sleep(50); }
+    console.error("[phaicaid] warning: daemon did not start within 2s — check .phaicaid/run/daemon.log");
     return;
   } else {
     if (fs.existsSync(portFile)) {
@@ -188,6 +189,7 @@ async function ensureDaemon(r) {
       }
       await sleep(50);
     }
+    console.error("[phaicaid] warning: daemon did not start within 2s — check .phaicaid/run/daemon.log");
   }
 }
 
@@ -365,12 +367,13 @@ program.command("doctor")
 
 program.command("run")
   .requiredOption("--event <event>", "event name")
+  .option("--target <target>", "target assistant (claude|copilot)", "claude")
   .action(async (opts) => {
     const r = root();
     const stdin = await readStdin();
     await ensureDaemon(r);
     const payload = stdin.trim() ? JSON.parse(stdin) : {};
-    const msg = JSON.stringify({ op: "hook", data: { __event: opts.event, __payload: payload } });
+    const msg = JSON.stringify({ op: "hook", data: { __event: opts.event, __payload: payload, __target: opts.target } });
 
     try {
       const resp = await rpc(r, msg);
@@ -393,6 +396,66 @@ program.command("run")
       console.error("[phaicaid] rpc failed:", e?.message || e);
       process.exit(1);
     }
+  });
+
+// ---------------------------------------------------------------------------
+// phaicaid stop / restart / clean
+// ---------------------------------------------------------------------------
+function readPid(r) {
+  const pidFile = path.join(rtDir(r), "run", "daemon.pid");
+  if (!fs.existsSync(pidFile)) return null;
+  const raw = fs.readFileSync(pidFile, "utf8").trim();
+  const pid = parseInt(raw, 10);
+  return pid > 0 ? pid : null;
+}
+
+async function stopDaemon(r) {
+  const pid = readPid(r);
+  if (pid == null) {
+    console.error("[phaicaid] no running daemon found");
+    return;
+  }
+  try {
+    process.kill(pid, "SIGTERM");
+  } catch (e) {
+    if (e.code === "ESRCH") {
+      // Process already gone — clean up stale PID file.
+      const pidFile = path.join(rtDir(r), "run", "daemon.pid");
+      try { fs.unlinkSync(pidFile); } catch {}
+      console.error("[phaicaid] stale pid file removed (process already gone)");
+      return;
+    }
+    throw e;
+  }
+  // Wait up to 2s for the daemon to exit.
+  for (let i = 0; i < 40; i++) {
+    try { process.kill(pid, 0); } catch { console.error("[phaicaid] daemon stopped"); return; }
+    await sleep(50);
+  }
+  console.error("[phaicaid] warning: daemon (pid " + pid + ") did not exit within 2s");
+}
+
+program.command("stop")
+  .description("Stop the running daemon")
+  .action(async () => { await stopDaemon(root()); });
+
+program.command("restart")
+  .description("Restart the daemon")
+  .action(async () => {
+    const r = root();
+    await stopDaemon(r);
+    await sleep(200);
+    await ensureDaemon(r);
+    console.error("[phaicaid] daemon restarted");
+  });
+
+program.command("clean")
+  .description("Stop daemon and remove .phaicaid runtime directory")
+  .action(async () => {
+    const r = root();
+    await stopDaemon(r);
+    fs.rmSync(rtDir(r), { recursive: true, force: true });
+    console.error("[phaicaid] cleaned " + rtDir(r));
   });
 
 program.parse(process.argv);

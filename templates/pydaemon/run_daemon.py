@@ -9,6 +9,7 @@ Modules are cached in memory and hot-reloaded via inotify (Linux) or polling.
 from __future__ import annotations
 
 import argparse
+import atexit
 import importlib.util
 import json
 import os
@@ -72,7 +73,17 @@ def get_module(file_path: Path) -> types.ModuleType:
     with _cache_lock:
         cached = _module_cache.get(file_path)
         if cached is not None:
-            return cached
+            # Check whether the file has been modified since we cached it.
+            try:
+                current_mtime = file_path.stat().st_mtime_ns
+            except OSError:
+                # File deleted — return stale cache gracefully.
+                return cached
+            if current_mtime == _module_mtime.get(file_path):
+                return cached
+            # Mtime changed — evict and reload below.
+            _module_cache.pop(file_path, None)
+            _module_mtime.pop(file_path, None)
         mod = _load_fresh(file_path)
         _module_cache[file_path] = mod
         _module_mtime[file_path] = file_path.stat().st_mtime_ns
@@ -190,6 +201,7 @@ def dispatch(
     event: str,
     payload: dict[str, Any],
     runtime_dir: Path,
+    target: str = "",
 ) -> dict[str, Any] | None:
     """Load the hook module for *event* and call the appropriate handler.
 
@@ -203,7 +215,7 @@ def dispatch(
     if not fn.exists():
         return None
     mod = get_module(fn)
-    ctx = HookContext(event, payload, runtime_dir)
+    ctx = HookContext(event, payload, runtime_dir, target=target)
 
     # Decorator-style dispatch takes priority.
     if has_decorators(mod):
@@ -236,9 +248,10 @@ def handle_req(line: str, runtime_dir: Path) -> str:
         data = req.get("data") or {}
         event = data.get("__event") or ""
         payload = data.get("__payload") or {}
+        target: str = data.get("__target") or ""
         raw: bool = req.get("raw", False)
         try:
-            res = dispatch(str(event), payload, runtime_dir)
+            res = dispatch(str(event), payload, runtime_dir, target=target)
             if raw:
                 # Return bare result JSON — Claude Code expects this shape.
                 return json.dumps(res) if res is not None else ""
@@ -286,7 +299,11 @@ def serve_unix(sock_path: Path, runtime_dir: Path) -> None:
     try:
         while True:
             conn, _ = srv.accept()
-            _handle_conn(conn, runtime_dir)
+            threading.Thread(
+                target=_handle_conn,
+                args=(conn, runtime_dir),
+                daemon=True,
+            ).start()
     except KeyboardInterrupt:
         pass
     finally:
@@ -305,7 +322,11 @@ def serve_tcp(port_file: Path, runtime_dir: Path) -> None:
     try:
         while True:
             conn, _ = srv.accept()
-            _handle_conn(conn, runtime_dir)
+            threading.Thread(
+                target=_handle_conn,
+                args=(conn, runtime_dir),
+                daemon=True,
+            ).start()
     except KeyboardInterrupt:
         pass
     finally:
@@ -329,6 +350,18 @@ def main() -> None:
     hooks_dir.mkdir(parents=True, exist_ok=True)
     run_dir = runtime_dir / "run"
     run_dir.mkdir(parents=True, exist_ok=True)
+
+    # Write PID file so the CLI can signal the daemon.
+    pid_file = run_dir / "daemon.pid"
+    pid_file.write_text(str(os.getpid()), encoding="utf-8")
+
+    def _remove_pid() -> None:
+        import contextlib
+
+        with contextlib.suppress(OSError):
+            pid_file.unlink()
+
+    atexit.register(_remove_pid)
 
     start_watcher(hooks_dir)
 

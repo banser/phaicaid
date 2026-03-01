@@ -24,12 +24,31 @@ class HookContext:
         runtime_dir: Path to the ``.phaicaid`` runtime directory.
     """
 
-    __slots__ = ("event", "payload", "runtime_dir")
+    __slots__ = ("event", "payload", "runtime_dir", "target")
 
-    def __init__(self, event: str, payload: dict[str, Any], runtime_dir: Path) -> None:
+    def __init__(
+        self,
+        event: str,
+        payload: dict[str, Any],
+        runtime_dir: Path,
+        target: str = "",
+    ) -> None:
         self.event = event
         self.payload = payload
         self.runtime_dir = runtime_dir
+        self.target = target
+
+    # -- Target detection ------------------------------------------------------
+
+    @property
+    def is_claude(self) -> bool:
+        """``True`` when the hook was triggered by Claude Code."""
+        return self.target == "claude"
+
+    @property
+    def is_copilot(self) -> bool:
+        """``True`` when the hook was triggered by GitHub Copilot."""
+        return self.target == "copilot"
 
     # -- Logging ---------------------------------------------------------------
 

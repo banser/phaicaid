@@ -8,6 +8,9 @@ from typing import Callable, TypeVar
 # Marker attributes set on decorated functions.
 _TOOL_ATTR = "_phaicaid_tool_patterns"
 _DEFAULT_ATTR = "_phaicaid_default"
+_ORDER_ATTR = "_phaicaid_order"
+
+_tool_order_counter = 0
 
 _F = TypeVar("_F", bound=Callable[..., object])
 
@@ -40,7 +43,10 @@ def tool(*patterns: str) -> Callable[[_F], _F]:
         compiled.append(re.compile(p))
 
     def _wrap(fn: _F) -> _F:
+        global _tool_order_counter  # noqa: PLW0603
+        _tool_order_counter += 1
         setattr(fn, _TOOL_ATTR, compiled)
+        setattr(fn, _ORDER_ATTR, _tool_order_counter)
         return fn
 
     return _wrap
@@ -55,5 +61,8 @@ def default(fn: _F) -> _F:
         def log_all(ctx):
             ctx.log(f"event: {ctx.tool_name}")
     """
+    global _tool_order_counter  # noqa: PLW0603
+    _tool_order_counter += 1
     setattr(fn, _DEFAULT_ATTR, True)
+    setattr(fn, _ORDER_ATTR, _tool_order_counter)
     return fn
